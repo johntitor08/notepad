@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Not Defteri</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Instrument+Serif:ital@0;1&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0e0e0e;
+      --surface:   #161616;
+      --border:    #252525;
+      --accent:    #c8f04a;
+      --accent2:   #4af0c8;
+      --text:      #e8e8e0;
+      --muted:     #555;
+      --bar-h:     42px;
+      --sidebar-w: 220px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* ── Title bar ── */
+    #titlebar {
+      height: var(--bar-h);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      -webkit-app-region: drag;
+      gap: 10px;
+      position: relative;
+    }
+
+    .win-btn {
+      -webkit-app-region: no-drag;
+      width: 13px; height: 13px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      transition: filter .15s;
+    }
+    .win-btn:hover { filter: brightness(1.3); }
+    #btn-close  { background: #ff5f57; }
+    #btn-min    { background: #febc2e; }
+    #btn-max    { background: #28c840; }
+
+    #app-title {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      letter-spacing: .12em;
+      color: var(--muted);
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+
+    .spacer { flex: 1; }
+
+    #toolbar {
+      -webkit-app-region: no-drag;
+      display: flex;
+      gap: 4px;
+    }
+
+    .tool-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      cursor: pointer;
+      border-radius: 3px;
+      transition: all .15s;
+    }
+    .tool-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .tool-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #0e0e0e;
+    }
+
+    /* ── Layout ── */
+    #app {
+      display: flex;
+      height: calc(100vh - var(--bar-h));
+    }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      width: var(--sidebar-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #sidebar-header {
+      padding: 14px 16px 10px;
+      font-size: 9px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #new-tab-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      transition: color .15s;
+      padding: 0 2px;
+    }
+    #new-tab-btn:hover { color: var(--accent); }
+
+    #tabs {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+    #tabs::-webkit-scrollbar { width: 3px; }
+    #tabs::-webkit-scrollbar-thumb { background: var(--border); }
+
+    .tab-item {
+      padding: 9px 16px;
+      font-size: 11px;
+      color: var(--muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all .12s;
+      border-left: 2px solid transparent;
+      position: relative;
+    }
+    .tab-item:hover { color: var(--text); background: rgba(255,255,255,.03); }
+    .tab-item.active {
+      color: var(--accent);
+      border-left-color: var(--accent);
+      background: rgba(200,240,74,.05);
+    }
+    .tab-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tab-close {
+      opacity: 0;
+      font-size: 14px;
+      color: var(--muted);
+      transition: opacity .12s;
+    }
+    .tab-item:hover .tab-close { opacity: 1; }
+    .tab-close:hover { color: #ff5f57; }
+    .tab-dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+
+    /* ── Stats panel ── */
+    #stats {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--muted);
+    }
+    .stat-row span:last-child { color: var(--text); }
+
+    /* ── Editor area ── */
+    #editor-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #editor-header {
+      padding: 0 28px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    #file-path {
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: .04em;
+    }
+    #modified-badge {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent2);
+      display: none;
+    }
+    #modified-badge.show { display: block; }
+
+    #editor-wrap {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+
+    #line-numbers {
+      padding: 20px 0 20px 12px;
+      min-width: 48px;
+      text-align: right;
+      font-size: 12px;
+      line-height: 1.75;
+      color: #2e2e2e;
+      user-select: none;
+      overflow: hidden;
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+    }
+
+    #editor {
+      flex: 1;
+      padding: 20px 28px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.75;
+      border: none;
+      outline: none;
+      resize: none;
+      user-select: text;
+      caret-color: var(--accent);
+      tab-size: 2;
+      overflow-y: auto;
+    }
+    #editor::selection { background: rgba(200,240,74,.2); }
+    #editor::placeholder { color: #2a2a2a; font-style: italic; }
+    #editor::-webkit-scrollbar { width: 4px; }
+    #editor::-webkit-scrollbar-thumb { background: var(--border); }
+
+    /* ── Status bar ── */
+    #statusbar {
+      height: 26px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 20px;
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: .05em;
+    }
+    #statusbar span { display: flex; align-items: center; gap: 5px; }
+    #statusbar .accent { color: var(--accent); }
+
+    /* ── Find bar ── */
+    #find-bar {
+      display: none;
+      position: absolute;
+      top: 36px;
+      right: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 8px 12px;
+      gap: 8px;
+      align-items: center;
+      z-index: 10;
+      box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    }
+    #find-bar.show { display: flex; }
+    #find-input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 3px;
+      outline: none;
+      width: 200px;
+    }
+    #find-input:focus { border-color: var(--accent); }
+    #find-count { font-size: 10px; color: var(--muted); min-width: 40px; }
+    .find-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 11px;
+      padding: 3px 8px;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    .find-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Font size slider */
+    #font-slider {
+      -webkit-appearance: none;
+      width: 70px;
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+    #font-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    /* animations */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    #editor-container { animation: fadeIn .25s ease; }
+  </style>
+</head>
+<body>
+
+<!-- Title bar -->
+<div id="titlebar">
+  <button class="win-btn" id="btn-close"  title="Kapat"></button>
+  <button class="win-btn" id="btn-min"    title="Küçült"></button>
+  <button class="win-btn" id="btn-max"    title="Büyüt"></button>
+  <span id="app-title">Not Defteri</span>
+  <div class="spacer"></div>
+  <div id="toolbar">
+    <button class="tool-btn" id="btn-new"     >Yeni</button>
+    <button class="tool-btn" id="btn-open"    >Aç</button>
+    <button class="tool-btn" id="btn-save"    >Kaydet</button>
+    <button class="tool-btn" id="btn-saveas"  >Farklı Kaydet</button>
+    <button class="tool-btn" id="btn-find"    >Bul</button>
+    <button class="tool-btn" id="btn-wrap"    >Kaydır</button>
+  </div>
+</div>
+
+<!-- App layout -->
+<div id="app">
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <span>Sekmeler</span>
+      <button id="new-tab-btn" title="Yeni sekme">+</button>
+    </div>
+    <div id="tabs"></div>
+    <div id="stats">
+      <div class="stat-row"><span>Kelime</span><span id="s-words">0</span></div>
+      <div class="stat-row"><span>Karakter</span><span id="s-chars">0</span></div>
+      <div class="stat-row"><span>Satır</span><span id="s-lines">0</span></div>
+      <div class="stat-row"><span>Boyut</span><span id="s-size">0 B</span></div>
+    </div>
+  </div>
+
+  <!-- Editor -->
+  <div id="editor-container">
+    <div id="editor-header">
+      <div id="modified-badge" title="Kaydedilmemiş değişiklikler"></div>
+      <span id="file-path">kayıt yok</span>
+    </div>
+
+    <!-- Find bar -->
+    <div id="find-bar">
+      <input id="find-input" type="text" placeholder="Ara…" spellcheck="false" />
+      <span id="find-count">—</span>
+      <button class="find-btn" id="find-prev">↑</button>
+      <button class="find-btn" id="find-next">↓</button>
+      <button class="find-btn" id="find-close">✕</button>
+    </div>
+
+    <div id="editor-wrap">
+      <div id="line-numbers"></div>
+      <textarea id="editor" spellcheck="false" placeholder="Yazmaya başla…"></textarea>
+    </div>
+
+    <div id="statusbar">
+      <span>Ln <span class="accent" id="sb-line">1</span></span>
+      <span>Col <span class="accent" id="sb-col">1</span></span>
+      <span>Seç <span class="accent" id="sb-sel">0</span></span>
+      <div class="spacer"></div>
+      <span>
+        <input id="font-slider" type="range" min="10" max="24" value="13" title="Yazı boyutu" />
+        <span id="font-label">13px</span>
+      </span>
+      <span>UTF-8</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────
+let tabs = [];
+let activeTab = null;
+let wrapEnabled = false;
+let findMatches = [];
+let findIndex = 0;
+
+const editor     = document.getElementById('editor');
+const lineNums   = document.getElementById('line-numbers');
+const filePath   = document.getElementById('file-path');
+const modBadge   = document.getElementById('modified-badge');
+const tabsEl     = document.getElementById('tabs');
+const findBar    = document.getElementById('find-bar');
+const findInput  = document.getElementById('find-input');
+const findCount  = document.getElementById('find-count');
+
+// ── Tab management ─────────────────────────────────────────
+function createTab(name = 'İsimsiz', content = '', path = null) {
+  const id = Date.now() + Math.random();
+  const tab = { id, name, content, path, modified: false, cursor: 0 };
+  tabs.push(tab);
+  renderTabs();
+  switchTab(id);
+  return tab;
+}
+
+function renderTabs() {
+  tabsEl.innerHTML = '';
+  tabs.forEach(t => {
+    const el = document.createElement('div');
+    el.className = 'tab-item' + (t === activeTab ? ' active' : '');
+    el.dataset.id = t.id;
+    el.innerHTML = `
+      ${t.modified ? '<div class="tab-dot"></div>' : ''}
+      <span class="tab-name" title="${t.name}">${t.name}</span>
+      <span class="tab-close" data-close="${t.id}">×</span>
+    `;
+    el.addEventListener('click', e => {
+      if (e.target.dataset.close) { closeTab(t.id); return; }
+      switchTab(t.id);
+    });
+    tabsEl.appendChild(el);
+  });
+}
+
+function switchTab(id) {
+  if (activeTab) {
+    activeTab.content = editor.value;
+    activeTab.cursor  = editor.selectionStart;
+  }
+  activeTab = tabs.find(t => t.id === id);
+  if (!activeTab) return;
+  editor.value = activeTab.content;
+  setTimeout(() => {
+    editor.selectionStart = editor.selectionEnd = activeTab.cursor;
+    editor.focus();
+  }, 0);
+  filePath.textContent  = activeTab.path || 'kayıt yok';
+  modBadge.className    = activeTab.modified ? 'show' : '';
+  renderTabs();
+  updateLineNumbers();
+  updateStats();
+  updateStatusBar();
+}
+
+function closeTab(id) {
+  const idx = tabs.findIndex(t => t.id === id);
+  if (idx === -1) return;
+  tabs.splice(idx, 1);
+  if (tabs.length === 0) { createTab(); return; }
+  if (activeTab?.id === id) {
+    switchTab(tabs[Math.min(idx, tabs.length - 1)].id);
+  } else {
+    renderTabs();
+  }
+}
+
+// ── Editor helpers ─────────────────────────────────────────
+function updateLineNumbers() {
+  const lines = editor.value.split('\n').length;
+  lineNums.innerHTML = Array.from({length: lines}, (_, i) =>
+    `<div>${i + 1}</div>`
+  ).join('');
+  // sync scroll
+  lineNums.scrollTop = editor.scrollTop;
+}
+
+function updateStats() {
+  const val = editor.value;
+  const words = val.trim() ? val.trim().split(/\s+/).length : 0;
+  document.getElementById('s-words').textContent = words.toLocaleString('tr');
+  document.getElementById('s-chars').textContent = val.length.toLocaleString('tr');
+  document.getElementById('s-lines').textContent = val.split('\n').length;
+  const bytes = new Blob([val]).size;
+  document.getElementById('s-size').textContent =
+    bytes < 1024 ? bytes + ' B' : (bytes / 1024).toFixed(1) + ' KB';
+}
+
+function updateStatusBar() {
+  const start = editor.selectionStart;
+  const text  = editor.value.substring(0, start);
+  const lines = text.split('\n');
+  document.getElementById('sb-line').textContent = lines.length;
+  document.getElementById('sb-col').textContent  = lines[lines.length - 1].length + 1;
+  const sel = Math.abs(editor.selectionEnd - editor.selectionStart);
+  document.getElementById('sb-sel').textContent  = sel;
+}
+
+function markModified() {
+  if (activeTab) {
+    activeTab.modified = true;
+    modBadge.className = 'show';
+    renderTabs();
+  }
+}
+
+// ── Editor events ──────────────────────────────────────────
+editor.addEventListener('input', () => {
+  updateLineNumbers();
+  updateStats();
+  markModified();
+});
+
+editor.addEventListener('scroll', () => {
+  lineNums.scrollTop = editor.scrollTop;
+});
+
+editor.addEventListener('keydown', e => {
+  // Tab key → insert spaces
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const s = editor.selectionStart, end = editor.selectionEnd;
+    editor.value = editor.value.substring(0, s) + '  ' + editor.value.substring(end);
+    editor.selectionStart = editor.selectionEnd = s + 2;
+    markModified();
+  }
+  // Ctrl+S
+  if (e.ctrlKey && e.key === 's' && !e.shiftKey) { e.preventDefault(); handleSave(); }
+  if (e.ctrlKey && e.key === 'S') { e.preventDefault(); handleSaveAs(); }
+  if (e.ctrlKey && e.key === 'f') { e.preventDefault(); toggleFind(); }
+  if (e.key === 'Escape') { findBar.classList.remove('show'); }
+});
+
+editor.addEventListener('keyup',   updateStatusBar);
+editor.addEventListener('click',   updateStatusBar);
+editor.addEventListener('select',  updateStatusBar);
+
+// ── File operations ────────────────────────────────────────
+async function handleNew() {
+  createTab();
+}
+
+async function handleOpen() {
+  const result = await window.api.openFile();
+  if (!result) return;
+  const name = result.path.split(/[\\/]/).pop();
+  const tab = createTab(name, result.content, result.path);
+  tab.modified = false;
+  renderTabs();
+  modBadge.className = '';
+  filePath.textContent = result.path;
+  updateLineNumbers();
+  updateStats();
+}
+
+async function handleSave() {
+  if (!activeTab) return;
+  activeTab.content = editor.value;
+  const result = await window.api.saveFile(activeTab.content);
+  if (result) {
+    activeTab.path = result.path;
+    activeTab.name = result.path.split(/[\\/]/).pop();
+    activeTab.modified = false;
+    filePath.textContent = result.path;
+    modBadge.className = '';
+    renderTabs();
+  }
+}
+
+async function handleSaveAs() {
+  if (!activeTab) return;
+  activeTab.content = editor.value;
+  const result = await window.api.saveFileAs(activeTab.content);
+  if (result) {
+    activeTab.path = result.path;
+    activeTab.name = result.path.split(/[\\/]/).pop();
+    activeTab.modified = false;
+    filePath.textContent = result.path;
+    modBadge.className = '';
+    renderTabs();
+  }
+}
+
+// ── Find ───────────────────────────────────────────────────
+function toggleFind() {
+  findBar.classList.toggle('show');
+  if (findBar.classList.contains('show')) findInput.focus();
+}
+
+function doFind(query) {
+  if (!query) { findCount.textContent = '—'; return; }
+  const text = editor.value;
+  const re = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  findMatches = [];
+  let m;
+  while ((m = re.exec(text)) !== null) findMatches.push(m.index);
+  findCount.textContent = findMatches.length ? `${findIndex + 1}/${findMatches.length}` : '0';
+  if (findMatches.length) jumpToMatch(0);
+}
+
+function jumpToMatch(i) {
+  findIndex = (i + findMatches.length) % findMatches.length;
+  const pos = findMatches[findIndex];
+  editor.focus();
+  editor.setSelectionRange(pos, pos + findInput.value.length);
+  findCount.textContent = `${findIndex + 1}/${findMatches.length}`;
+}
+
+findInput.addEventListener('input', () => doFind(findInput.value));
+document.getElementById('find-next').addEventListener('click', () => jumpToMatch(findIndex + 1));
+document.getElementById('find-prev').addEventListener('click', () => jumpToMatch(findIndex - 1));
+document.getElementById('find-close').addEventListener('click', () => findBar.classList.remove('show'));
+
+// ── Toolbar buttons ────────────────────────────────────────
+document.getElementById('btn-new'   ).addEventListener('click', handleNew);
+document.getElementById('btn-open'  ).addEventListener('click', handleOpen);
+document.getElementById('btn-save'  ).addEventListener('click', handleSave);
+document.getElementById('btn-saveas').addEventListener('click', handleSaveAs);
+document.getElementById('btn-find'  ).addEventListener('click', toggleFind);
+document.getElementById('btn-wrap'  ).addEventListener('click', () => {
+  wrapEnabled = !wrapEnabled;
+  editor.style.whiteSpace = wrapEnabled ? 'pre-wrap' : 'pre';
+  document.getElementById('btn-wrap').classList.toggle('active', wrapEnabled);
+});
+
+document.getElementById('new-tab-btn').addEventListener('click', handleNew);
+
+// ── Window controls ────────────────────────────────────────
+document.getElementById('btn-close').addEventListener('click', () => window.api.close());
+document.getElementById('btn-min'  ).addEventListener('click', () => window.api.minimize());
+document.getElementById('btn-max'  ).addEventListener('click', () => window.api.maximize());
+
+// ── Font size slider ───────────────────────────────────────
+const slider = document.getElementById('font-slider');
+const fontLabel = document.getElementById('font-label');
+slider.addEventListener('input', () => {
+  const sz = slider.value + 'px';
+  editor.style.fontSize = sz;
+  lineNums.style.fontSize = sz;
+  fontLabel.textContent = sz;
+  updateLineNumbers();
+});
+
+// ── Init ───────────────────────────────────────────────────
+createTab();
+editor.style.whiteSpace = 'pre';
+</script>
+</body>
+</html>
