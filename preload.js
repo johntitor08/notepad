@@ -3,9 +3,11 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('api', {
   newFile: () => ipcRenderer.invoke('new-file'),
   openFile: () => ipcRenderer.invoke('open-file'),
-  saveFile: (content) => ipcRenderer.invoke('save-file', content),
+  saveFile: (content, path) => ipcRenderer.invoke('save-file', { content, path }),
   saveFileAs: (content) => ipcRenderer.invoke('save-file-as', content),
   minimize: () => ipcRenderer.invoke('minimize-window'),
   maximize: () => ipcRenderer.invoke('maximize-window'),
   close: () => ipcRenderer.invoke('close-window'),
+  confirmClose: (count) => ipcRenderer.invoke('confirm-close', count),
+  onCheckUnsaved: (cb) => ipcRenderer.on('check-unsaved', cb),
 });

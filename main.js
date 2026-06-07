@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 let mainWindow;
-let currentFilePath = null;
+let forceQuit = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -22,6 +22,13 @@ function createWindow() {
   });
 
   mainWindow.loadFile('index.html');
+
+  // Guard against closing with unsaved changes: ask the renderer first.
+  mainWindow.on('close', (e) => {
+    if (forceQuit) return;
+    e.preventDefault();
+    mainWindow.webContents.send('check-unsaved');
+  });
 }
 
 app.whenReady().then(() => {
@@ -33,9 +40,21 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
+async function saveAs(content) {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    filters: [
+      { name: 'Metin Dosyası', extensions: ['txt'] },
+      { name: 'Markdown', extensions: ['md'] },
+      { name: 'Tüm Dosyalar', extensions: ['*'] }
+    ]
+  });
+  if (result.canceled) return null;
+  fs.writeFileSync(result.filePath, content, 'utf-8');
+  return { path: result.filePath };
+}
+
 // IPC Handlers
 ipcMain.handle('new-file', async () => {
-  currentFilePath = null;
   return { path: null };
 });
 
@@ -49,31 +68,47 @@ ipcMain.handle('open-file', async () => {
   });
   if (result.canceled) return null;
   const filePath = result.filePaths[0];
-  const content = fs.readFileSync(filePath, 'utf-8');
-  currentFilePath = filePath;
-  return { path: filePath, content };
-});
-
-ipcMain.handle('save-file', async (event, content) => {
-  if (currentFilePath) {
-    fs.writeFileSync(currentFilePath, content, 'utf-8');
-    return { path: currentFilePath };
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return { path: filePath, content };
+  } catch (err) {
+    dialog.showErrorBox('Dosya açılamadı', err.message);
+    return null;
   }
-  return ipcMain.emit('save-file-as', event, content);
 });
 
-ipcMain.handle('save-file-as', async (event, content) => {
-  const result = await dialog.showSaveDialog(mainWindow, {
-    filters: [
-      { name: 'Metin Dosyası', extensions: ['txt'] },
-      { name: 'Markdown', extensions: ['md'] },
-      { name: 'Tüm Dosyalar', extensions: ['*'] }
-    ]
-  });
-  if (result.canceled) return null;
-  fs.writeFileSync(result.filePath, content, 'utf-8');
-  currentFilePath = result.filePath;
-  return { path: result.filePath };
+// Save to the tab's own path when known, otherwise fall back to Save As.
+ipcMain.handle('save-file', async (event, { content, path: filePath }) => {
+  if (filePath) {
+    try {
+      fs.writeFileSync(filePath, content, 'utf-8');
+      return { path: filePath };
+    } catch (err) {
+      dialog.showErrorBox('Dosya kaydedilemedi', err.message);
+      return null;
+    }
+  }
+  return saveAs(content);
+});
+
+ipcMain.handle('save-file-as', async (event, content) => saveAs(content));
+
+// Renderer's answer to the unsaved-changes prompt on window close.
+ipcMain.handle('confirm-close', async (event, unsavedCount) => {
+  if (unsavedCount > 0) {
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      buttons: ['İptal', 'Yine de Çık'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Kaydedilmemiş değişiklikler',
+      message: `${unsavedCount} sekmede kaydedilmemiş değişiklik var.`,
+      detail: 'Çıkmak istediğinizden emin misiniz?'
+    });
+    if (response === 0) return;
+  }
+  forceQuit = true;
+  mainWindow.close();
 });
 
 ipcMain.handle('minimize-window', () => mainWindow.minimize());

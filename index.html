@@ -460,11 +460,25 @@ function renderTabs() {
     const el = document.createElement('div');
     el.className = 'tab-item' + (t === activeTab ? ' active' : '');
     el.dataset.id = t.id;
-    el.innerHTML = `
-      ${t.modified ? '<div class="tab-dot"></div>' : ''}
-      <span class="tab-name" title="${t.name}">${t.name}</span>
-      <span class="tab-close" data-close="${t.id}">×</span>
-    `;
+
+    if (t.modified) {
+      const dot = document.createElement('div');
+      dot.className = 'tab-dot';
+      el.appendChild(dot);
+    }
+    // textContent avoids HTML injection from file/tab names.
+    const nameEl = document.createElement('span');
+    nameEl.className = 'tab-name';
+    nameEl.title = t.name;
+    nameEl.textContent = t.name;
+    el.appendChild(nameEl);
+
+    const closeEl = document.createElement('span');
+    closeEl.className = 'tab-close';
+    closeEl.dataset.close = t.id;
+    closeEl.textContent = '×';
+    el.appendChild(closeEl);
+
     el.addEventListener('click', e => {
       if (e.target.dataset.close) { closeTab(t.id); return; }
       switchTab(t.id);
@@ -496,6 +510,10 @@ function switchTab(id) {
 function closeTab(id) {
   const idx = tabs.findIndex(t => t.id === id);
   if (idx === -1) return;
+  const tab = tabs[idx];
+  // Sync in-progress edits so the modified check reflects current state.
+  if (tab === activeTab) tab.content = editor.value;
+  if (tab.modified && !confirm(`"${tab.name}" kaydedilmemiş değişiklikler içeriyor. Kapatılsın mı?`)) return;
   tabs.splice(idx, 1);
   if (tabs.length === 0) { createTab(); return; }
   if (activeTab?.id === id) {
@@ -568,6 +586,9 @@ editor.addEventListener('keydown', e => {
   if (e.ctrlKey && e.key === 's' && !e.shiftKey) { e.preventDefault(); handleSave(); }
   if (e.ctrlKey && e.key === 'S') { e.preventDefault(); handleSaveAs(); }
   if (e.ctrlKey && e.key === 'f') { e.preventDefault(); toggleFind(); }
+  if (e.ctrlKey && e.key === 'n') { e.preventDefault(); handleNew(); }
+  if (e.ctrlKey && e.key === 'o') { e.preventDefault(); handleOpen(); }
+  if (e.ctrlKey && e.key === 'w') { e.preventDefault(); if (activeTab) closeTab(activeTab.id); }
   if (e.key === 'Escape') { findBar.classList.remove('show'); }
 });
 
@@ -596,7 +617,7 @@ async function handleOpen() {
 async function handleSave() {
   if (!activeTab) return;
   activeTab.content = editor.value;
-  const result = await window.api.saveFile(activeTab.content);
+  const result = await window.api.saveFile(activeTab.content, activeTab.path);
   if (result) {
     activeTab.path = result.path;
     activeTab.name = result.path.split(/[\\/]/).pop();
@@ -647,6 +668,15 @@ function jumpToMatch(i) {
 }
 
 findInput.addEventListener('input', () => doFind(findInput.value));
+findInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (findMatches.length) jumpToMatch(findIndex + (e.shiftKey ? -1 : 1));
+  } else if (e.key === 'Escape') {
+    findBar.classList.remove('show');
+    editor.focus();
+  }
+});
 document.getElementById('find-next').addEventListener('click', () => jumpToMatch(findIndex + 1));
 document.getElementById('find-prev').addEventListener('click', () => jumpToMatch(findIndex - 1));
 document.getElementById('find-close').addEventListener('click', () => findBar.classList.remove('show'));
@@ -679,6 +709,14 @@ slider.addEventListener('input', () => {
   lineNums.style.fontSize = sz;
   fontLabel.textContent = sz;
   updateLineNumbers();
+});
+
+// ── Window close guard ─────────────────────────────────────
+// Main process asks before closing; reply with the unsaved-tab count.
+window.api.onCheckUnsaved(() => {
+  if (activeTab) activeTab.content = editor.value;
+  const unsaved = tabs.filter(t => t.modified).length;
+  window.api.confirmClose(unsaved);
 });
 
 // ── Init ───────────────────────────────────────────────────
