@@ -616,8 +616,67 @@ editor.addEventListener('keydown', e => {
   if (e.ctrlKey && e.key === 'n') { e.preventDefault(); handleNew(); }
   if (e.ctrlKey && e.key === 'o') { e.preventDefault(); handleOpen(); }
   if (e.ctrlKey && e.key === 'w') { e.preventDefault(); if (activeTab) closeTab(activeTab.id); }
+  // Line operations
+  if (e.ctrlKey && !e.shiftKey && e.key === 'd') { e.preventDefault(); duplicateLine(); }
+  if (e.ctrlKey && e.shiftKey && e.key === 'K')  { e.preventDefault(); deleteLine(); }
+  if (e.altKey && e.key === 'ArrowUp')   { e.preventDefault(); moveLines(-1); }
+  if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); moveLines(1); }
   if (e.key === 'Escape') { findBar.classList.remove('show'); }
 });
+
+// ── Line editing ───────────────────────────────────────────
+// Range of the full lines spanning the current selection.
+function lineRange() {
+  const value = editor.value;
+  const start = value.lastIndexOf('\n', editor.selectionStart - 1) + 1;
+  let end = value.indexOf('\n', editor.selectionEnd);
+  if (end === -1) end = value.length;
+  return { start, end };
+}
+
+function afterLineEdit() {
+  markModified();
+  updateLineNumbers();
+  updateStats();
+  updateStatusBar();
+}
+
+function duplicateLine() {
+  const { start, end } = lineRange();
+  const block = editor.value.slice(start, end);
+  editor.setRangeText('\n' + block, end, end, 'end'); // setRangeText keeps native undo
+  afterLineEdit();
+}
+
+function deleteLine() {
+  let { start, end } = lineRange();
+  if (end < editor.value.length) end += 1;      // consume trailing newline …
+  else if (start > 0) start -= 1;               // … or the preceding one on the last line
+  editor.setRangeText('', start, end, 'end');
+  afterLineEdit();
+}
+
+function moveLines(dir) {
+  const value = editor.value;
+  const { start, end } = lineRange();
+  const block = value.slice(start, end);
+  if (dir < 0) {
+    if (start === 0) return;
+    const prevStart = value.lastIndexOf('\n', start - 2) + 1;
+    const prevLine = value.slice(prevStart, start - 1);
+    editor.setRangeText(block + '\n' + prevLine, prevStart, end, 'preserve');
+    editor.setSelectionRange(prevStart, prevStart + block.length);
+  } else {
+    if (end === value.length) return;
+    const nextEnd0 = value.indexOf('\n', end + 1);
+    const nextEnd = nextEnd0 === -1 ? value.length : nextEnd0;
+    const nextLine = value.slice(end + 1, nextEnd);
+    editor.setRangeText(nextLine + '\n' + block, start, nextEnd, 'preserve');
+    const newStart = start + nextLine.length + 1;
+    editor.setSelectionRange(newStart, newStart + block.length);
+  }
+  afterLineEdit();
+}
 
 editor.addEventListener('keyup',   updateStatusBar);
 editor.addEventListener('click',   updateStatusBar);
@@ -774,6 +833,7 @@ document.getElementById('btn-wrap'  ).addEventListener('click', () => {
   wrapEnabled = !wrapEnabled;
   editor.style.whiteSpace = wrapEnabled ? 'pre-wrap' : 'pre';
   document.getElementById('btn-wrap').classList.toggle('active', wrapEnabled);
+  savePrefs();
 });
 
 document.getElementById('new-tab-btn').addEventListener('click', handleNew);
@@ -786,13 +846,42 @@ document.getElementById('btn-max'  ).addEventListener('click', () => window.api.
 // ── Font size slider ───────────────────────────────────────
 const slider = document.getElementById('font-slider');
 const fontLabel = document.getElementById('font-label');
-slider.addEventListener('input', () => {
-  const sz = slider.value + 'px';
+function applyFontSize(px) {
+  const sz = px + 'px';
   editor.style.fontSize = sz;
   lineNums.style.fontSize = sz;
   fontLabel.textContent = sz;
   updateLineNumbers();
+}
+slider.addEventListener('input', () => {
+  applyFontSize(slider.value);
+  savePrefs();
 });
+
+// ── Editor preferences (font size + word wrap) persist across restarts ──
+const PREFS_KEY = 'notepad-prefs';
+function savePrefs() {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({
+      fontSize: parseInt(slider.value, 10),
+      wrap: wrapEnabled
+    }));
+  } catch { /* storage unavailable */ }
+}
+function loadPrefs() {
+  let p;
+  try { p = JSON.parse(localStorage.getItem(PREFS_KEY)); } catch { p = null; }
+  if (!p) return;
+  if (Number.isFinite(p.fontSize) && p.fontSize >= 10 && p.fontSize <= 24) {
+    slider.value = p.fontSize;
+    applyFontSize(p.fontSize);
+  }
+  if (p.wrap) {
+    wrapEnabled = true;
+    editor.style.whiteSpace = 'pre-wrap';
+    document.getElementById('btn-wrap').classList.add('active');
+  }
+}
 
 // ── Drag & drop to open files ──────────────────────────────
 document.addEventListener('dragover', e => { e.preventDefault(); });
@@ -875,6 +964,7 @@ window.api.onCheckUnsaved(() => {
 // ── Init ───────────────────────────────────────────────────
 if (!restoreSession()) createTab();
 editor.style.whiteSpace = 'pre';
+loadPrefs();
 </script>
 </body>
 </html>
