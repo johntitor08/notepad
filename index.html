@@ -342,6 +342,7 @@
       border-radius: 3px;
     }
     .find-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .find-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(200,240,74,.08); }
 
     /* Font size slider */
     #font-slider {
@@ -417,6 +418,8 @@
     <div id="find-bar">
       <div class="find-row">
         <input id="find-input" type="text" placeholder="Ara…" spellcheck="false" />
+        <button class="find-btn" id="find-case" title="Büyük/küçük harf duyarlı">Aa</button>
+        <button class="find-btn" id="find-word" title="Tam kelime">W</button>
         <span id="find-count">—</span>
         <button class="find-btn" id="find-prev" title="Önceki">↑</button>
         <button class="find-btn" id="find-next" title="Sonraki">↓</button>
@@ -760,11 +763,22 @@ function openReplace() {
   replaceInput.focus();
 }
 
-// All occurrences of `term` in the current editor text (case-insensitive).
+// Search options toggled from the find bar.
+let caseSensitive = false;
+let wholeWord = false;
+
+// Build a global regex for `term`, honoring the case/whole-word toggles.
+function buildFindRegex(term) {
+  let pat = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (wholeWord) pat = `\\b${pat}\\b`;
+  return new RegExp(pat, caseSensitive ? 'g' : 'gi');
+}
+
+// All occurrences of `term` in the current editor text.
 function computeMatches(term) {
   const matches = [];
   if (!term) return matches;
-  const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  const re = buildFindRegex(term);
   let m;
   while ((m = re.exec(editor.value)) !== null) {
     matches.push(m.index);
@@ -798,7 +812,7 @@ function replaceCurrent() {
 function replaceAll() {
   const term = findInput.value;
   if (!term) return;
-  const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  const re = buildFindRegex(term);
   const replaced = editor.value.replace(re, () => replaceInput.value); // literal replacement
   if (replaced === editor.value) return;
   editor.value = replaced;
@@ -829,6 +843,16 @@ findInput.addEventListener('keydown', e => {
 document.getElementById('find-next').addEventListener('click', () => { if (findMatches.length) jumpToMatch(findIndex + 1); });
 document.getElementById('find-prev').addEventListener('click', () => { if (findMatches.length) jumpToMatch(findIndex - 1); });
 document.getElementById('find-close').addEventListener('click', () => findBar.classList.remove('show'));
+document.getElementById('find-case').addEventListener('click', e => {
+  caseSensitive = !caseSensitive;
+  e.currentTarget.classList.toggle('active', caseSensitive);
+  findIndex = 0; doFind(findInput.value);
+});
+document.getElementById('find-word').addEventListener('click', e => {
+  wholeWord = !wholeWord;
+  e.currentTarget.classList.toggle('active', wholeWord);
+  findIndex = 0; doFind(findInput.value);
+});
 document.getElementById('replace-one').addEventListener('click', replaceCurrent);
 document.getElementById('replace-all').addEventListener('click', replaceAll);
 replaceInput.addEventListener('keydown', e => {
