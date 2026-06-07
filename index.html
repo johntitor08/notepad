@@ -300,6 +300,8 @@
     }
     #statusbar span { display: flex; align-items: center; gap: 5px; }
     #statusbar .accent { color: var(--accent); }
+    #statusbar .clickable { cursor: pointer; }
+    #statusbar .clickable:hover { filter: brightness(1.35); }
 
     /* ── Find bar ── */
     #find-bar {
@@ -446,6 +448,7 @@
         <input id="font-slider" type="range" min="10" max="24" value="13" title="Yazı boyutu" />
         <span id="font-label">13px</span>
       </span>
+      <span id="sb-eol" class="accent clickable" title="Satır sonunu değiştir">LF</span>
       <span>UTF-8</span>
     </div>
   </div>
@@ -470,9 +473,9 @@ const findCount  = document.getElementById('find-count');
 const replaceInput = document.getElementById('replace-input');
 
 // ── Tab management ─────────────────────────────────────────
-function createTab(name = 'İsimsiz', content = '', path = null) {
+function createTab(name = 'İsimsiz', content = '', path = null, eol = 'LF') {
   const id = Date.now() + Math.random();
-  const tab = { id, name, content, path, modified: false, cursor: 0 };
+  const tab = { id, name, content, path, modified: false, cursor: 0, eol };
   tabs.push(tab);
   renderTabs();
   switchTab(id);
@@ -530,7 +533,12 @@ function switchTab(id) {
   updateLineNumbers();
   updateStats();
   updateStatusBar();
+  updateEol();
   persistSession();
+}
+
+function updateEol() {
+  document.getElementById('sb-eol').textContent = activeTab ? activeTab.eol : 'LF';
 }
 
 function closeTab(id) {
@@ -704,13 +712,16 @@ async function handleNew() {
 }
 
 function openContent(name, content, path) {
-  const tab = createTab(name, content, path);
+  // Detect the file's line ending, then normalize to \n for the textarea.
+  const eol = /\r\n/.test(content) ? 'CRLF' : 'LF';
+  const tab = createTab(name, content.replace(/\r\n/g, '\n'), path, eol);
   tab.modified = false;
   renderTabs();
   modBadge.className = '';
   filePath.textContent = path || 'kayıt yok';
   updateLineNumbers();
   updateStats();
+  updateEol();
   persistSession();
 }
 
@@ -721,10 +732,17 @@ async function handleOpen() {
   openContent(name, result.content, result.path);
 }
 
+// Serialize the active buffer using the tab's chosen line ending.
+function contentForSave() {
+  return activeTab.eol === 'CRLF'
+    ? activeTab.content.replace(/\n/g, '\r\n')
+    : activeTab.content;
+}
+
 async function handleSave() {
   if (!activeTab) return;
   activeTab.content = editor.value;
-  const result = await window.api.saveFile(activeTab.content, activeTab.path);
+  const result = await window.api.saveFile(contentForSave(), activeTab.path);
   if (result) {
     activeTab.path = result.path;
     activeTab.name = result.path.split(/[\\/]/).pop();
@@ -739,7 +757,7 @@ async function handleSave() {
 async function handleSaveAs() {
   if (!activeTab) return;
   activeTab.content = editor.value;
-  const result = await window.api.saveFileAs(activeTab.content);
+  const result = await window.api.saveFileAs(contentForSave());
   if (result) {
     activeTab.path = result.path;
     activeTab.name = result.path.split(/[\\/]/).pop();
@@ -878,6 +896,14 @@ document.getElementById('btn-theme' ).addEventListener('click', () => {
   savePrefs();
 });
 
+// ── Line-ending toggle ─────────────────────────────────────
+document.getElementById('sb-eol').addEventListener('click', () => {
+  if (!activeTab) return;
+  activeTab.eol = activeTab.eol === 'CRLF' ? 'LF' : 'CRLF';
+  updateEol();
+  markModified();
+});
+
 document.getElementById('new-tab-btn').addEventListener('click', handleNew);
 
 // ── Window controls ────────────────────────────────────────
@@ -975,7 +1001,7 @@ function persistSession() {
   if (activeTab) activeTab.content = editor.value;
   try {
     const data = {
-      tabs: tabs.map(t => ({ name: t.name, content: t.content, path: t.path, modified: t.modified })),
+      tabs: tabs.map(t => ({ name: t.name, content: t.content, path: t.path, modified: t.modified, eol: t.eol })),
       activeIndex: tabs.indexOf(activeTab)
     };
     localStorage.setItem(SESSION_KEY, JSON.stringify(data));
@@ -998,7 +1024,8 @@ function restoreSession() {
       content: t.content || '',
       path: t.path || null,
       modified: !!t.modified,
-      cursor: 0
+      cursor: 0,
+      eol: t.eol === 'CRLF' ? 'CRLF' : 'LF'
     });
   });
   renderTabs();
