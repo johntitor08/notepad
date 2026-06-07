@@ -17,8 +17,20 @@
       --accent2:   #4af0c8;
       --text:      #e8e8e0;
       --muted:     #555;
+      --gutter:    #2e2e2e;
       --bar-h:     42px;
       --sidebar-w: 220px;
+    }
+
+    :root[data-theme="light"] {
+      --bg:        #f7f7f2;
+      --surface:   #ffffff;
+      --border:    #e2e2da;
+      --accent:    #5c8a00;
+      --accent2:   #009e88;
+      --text:      #1c1c1a;
+      --muted:     #9a9a90;
+      --gutter:    #b8b8ae;
     }
 
     html, body {
@@ -245,7 +257,7 @@
       text-align: right;
       font-size: 12px;
       line-height: 1.75;
-      color: #2e2e2e;
+      color: var(--gutter);
       user-select: none;
       overflow: hidden;
       background: var(--bg);
@@ -269,7 +281,7 @@
       overflow-y: auto;
     }
     #editor::selection { background: rgba(200,240,74,.2); }
-    #editor::placeholder { color: #2a2a2a; font-style: italic; }
+    #editor::placeholder { color: var(--gutter); font-style: italic; }
     #editor::-webkit-scrollbar { width: 4px; }
     #editor::-webkit-scrollbar-thumb { background: var(--border); }
 
@@ -372,6 +384,7 @@
     <button class="tool-btn" id="btn-saveas"  >Farklı Kaydet</button>
     <button class="tool-btn" id="btn-find"    >Bul</button>
     <button class="tool-btn" id="btn-wrap"    >Kaydır</button>
+    <button class="tool-btn" id="btn-theme"   >Tema</button>
   </div>
 </div>
 
@@ -835,6 +848,11 @@ document.getElementById('btn-wrap'  ).addEventListener('click', () => {
   document.getElementById('btn-wrap').classList.toggle('active', wrapEnabled);
   savePrefs();
 });
+document.getElementById('btn-theme' ).addEventListener('click', () => {
+  currentTheme = currentTheme === 'light' ? 'dark' : 'light';
+  applyTheme(currentTheme);
+  savePrefs();
+});
 
 document.getElementById('new-tab-btn').addEventListener('click', handleNew);
 
@@ -858,13 +876,22 @@ slider.addEventListener('input', () => {
   savePrefs();
 });
 
-// ── Editor preferences (font size + word wrap) persist across restarts ──
+// ── Theme ──────────────────────────────────────────────────
+let currentTheme = 'dark';
+function applyTheme(theme) {
+  if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  else document.documentElement.removeAttribute('data-theme');
+  document.getElementById('btn-theme').classList.toggle('active', theme === 'light');
+}
+
+// ── Editor preferences (font size, word wrap, theme) persist across restarts ──
 const PREFS_KEY = 'notepad-prefs';
 function savePrefs() {
   try {
     localStorage.setItem(PREFS_KEY, JSON.stringify({
       fontSize: parseInt(slider.value, 10),
-      wrap: wrapEnabled
+      wrap: wrapEnabled,
+      theme: currentTheme
     }));
   } catch { /* storage unavailable */ }
 }
@@ -880,6 +907,10 @@ function loadPrefs() {
     wrapEnabled = true;
     editor.style.whiteSpace = 'pre-wrap';
     document.getElementById('btn-wrap').classList.add('active');
+  }
+  if (p.theme === 'light') {
+    currentTheme = 'light';
+    applyTheme('light');
   }
 }
 
