@@ -304,8 +304,9 @@
       z-index: 10;
       box-shadow: 0 8px 32px rgba(0,0,0,.5);
     }
-    #find-bar.show { display: flex; }
-    #find-input {
+    #find-bar.show { display: flex; flex-direction: column; }
+    .find-row { display: flex; gap: 8px; align-items: center; }
+    #find-input, #replace-input {
       background: var(--bg);
       border: 1px solid var(--border);
       color: var(--text);
@@ -316,7 +317,7 @@
       outline: none;
       width: 200px;
     }
-    #find-input:focus { border-color: var(--accent); }
+    #find-input:focus, #replace-input:focus { border-color: var(--accent); }
     #find-count { font-size: 10px; color: var(--muted); min-width: 40px; }
     .find-btn {
       background: none;
@@ -399,13 +400,20 @@
       <span id="file-path">kayıt yok</span>
     </div>
 
-    <!-- Find bar -->
+    <!-- Find / Replace bar -->
     <div id="find-bar">
-      <input id="find-input" type="text" placeholder="Ara…" spellcheck="false" />
-      <span id="find-count">—</span>
-      <button class="find-btn" id="find-prev">↑</button>
-      <button class="find-btn" id="find-next">↓</button>
-      <button class="find-btn" id="find-close">✕</button>
+      <div class="find-row">
+        <input id="find-input" type="text" placeholder="Ara…" spellcheck="false" />
+        <span id="find-count">—</span>
+        <button class="find-btn" id="find-prev" title="Önceki">↑</button>
+        <button class="find-btn" id="find-next" title="Sonraki">↓</button>
+        <button class="find-btn" id="find-close" title="Kapat">✕</button>
+      </div>
+      <div class="find-row">
+        <input id="replace-input" type="text" placeholder="Değiştir…" spellcheck="false" />
+        <button class="find-btn" id="replace-one" title="Değiştir">Değiştir</button>
+        <button class="find-btn" id="replace-all" title="Tümünü değiştir">Tümü</button>
+      </div>
     </div>
 
     <div id="editor-wrap">
@@ -443,6 +451,7 @@ const tabsEl     = document.getElementById('tabs');
 const findBar    = document.getElementById('find-bar');
 const findInput  = document.getElementById('find-input');
 const findCount  = document.getElementById('find-count');
+const replaceInput = document.getElementById('replace-input');
 
 // ── Tab management ─────────────────────────────────────────
 function createTab(name = 'İsimsiz', content = '', path = null) {
@@ -586,6 +595,7 @@ editor.addEventListener('keydown', e => {
   if (e.ctrlKey && e.key === 's' && !e.shiftKey) { e.preventDefault(); handleSave(); }
   if (e.ctrlKey && e.key === 'S') { e.preventDefault(); handleSaveAs(); }
   if (e.ctrlKey && e.key === 'f') { e.preventDefault(); toggleFind(); }
+  if (e.ctrlKey && e.key === 'h') { e.preventDefault(); openReplace(); }
   if (e.ctrlKey && e.key === 'n') { e.preventDefault(); handleNew(); }
   if (e.ctrlKey && e.key === 'o') { e.preventDefault(); handleOpen(); }
   if (e.ctrlKey && e.key === 'w') { e.preventDefault(); if (activeTab) closeTab(activeTab.id); }
@@ -601,17 +611,21 @@ async function handleNew() {
   createTab();
 }
 
+function openContent(name, content, path) {
+  const tab = createTab(name, content, path);
+  tab.modified = false;
+  renderTabs();
+  modBadge.className = '';
+  filePath.textContent = path || 'kayıt yok';
+  updateLineNumbers();
+  updateStats();
+}
+
 async function handleOpen() {
   const result = await window.api.openFile();
   if (!result) return;
   const name = result.path.split(/[\\/]/).pop();
-  const tab = createTab(name, result.content, result.path);
-  tab.modified = false;
-  renderTabs();
-  modBadge.className = '';
-  filePath.textContent = result.path;
-  updateLineNumbers();
-  updateStats();
+  openContent(name, result.content, result.path);
 }
 
 async function handleSave() {
@@ -642,21 +656,64 @@ async function handleSaveAs() {
   }
 }
 
-// ── Find ───────────────────────────────────────────────────
+// ── Find / Replace ─────────────────────────────────────────
 function toggleFind() {
   findBar.classList.toggle('show');
   if (findBar.classList.contains('show')) findInput.focus();
 }
 
-function doFind(query) {
-  if (!query) { findCount.textContent = '—'; return; }
-  const text = editor.value;
-  const re = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-  findMatches = [];
+function openReplace() {
+  findBar.classList.add('show');
+  if (findInput.value) doFind(findInput.value);
+  replaceInput.focus();
+}
+
+// All occurrences of `term` in the current editor text (case-insensitive).
+function computeMatches(term) {
+  const matches = [];
+  if (!term) return matches;
+  const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
   let m;
-  while ((m = re.exec(text)) !== null) findMatches.push(m.index);
+  while ((m = re.exec(editor.value)) !== null) {
+    matches.push(m.index);
+    if (m.index === re.lastIndex) re.lastIndex++; // guard against zero-length loops
+  }
+  return matches;
+}
+
+function doFind(query) {
+  if (!query) { findMatches = []; findCount.textContent = '—'; return; }
+  findMatches = computeMatches(query);
   findCount.textContent = findMatches.length ? `${findIndex + 1}/${findMatches.length}` : '0';
   if (findMatches.length) jumpToMatch(0);
+}
+
+function replaceCurrent() {
+  const term = findInput.value;
+  if (!term || !findMatches.length) return;
+  const pos = findMatches[findIndex];
+  editor.setRangeText(replaceInput.value, pos, pos + term.length, 'end');
+  markModified();
+  updateLineNumbers();
+  updateStats();
+  findMatches = computeMatches(term);
+  if (!findMatches.length) { findCount.textContent = '0'; return; }
+  const after = pos + replaceInput.value.length;
+  const next = findMatches.findIndex(p => p >= after);
+  jumpToMatch(next === -1 ? 0 : next);
+}
+
+function replaceAll() {
+  const term = findInput.value;
+  if (!term) return;
+  const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  const replaced = editor.value.replace(re, () => replaceInput.value); // literal replacement
+  if (replaced === editor.value) return;
+  editor.value = replaced;
+  markModified();
+  updateLineNumbers();
+  updateStats();
+  doFind(term);
 }
 
 function jumpToMatch(i) {
@@ -677,9 +734,15 @@ findInput.addEventListener('keydown', e => {
     editor.focus();
   }
 });
-document.getElementById('find-next').addEventListener('click', () => jumpToMatch(findIndex + 1));
-document.getElementById('find-prev').addEventListener('click', () => jumpToMatch(findIndex - 1));
+document.getElementById('find-next').addEventListener('click', () => { if (findMatches.length) jumpToMatch(findIndex + 1); });
+document.getElementById('find-prev').addEventListener('click', () => { if (findMatches.length) jumpToMatch(findIndex - 1); });
 document.getElementById('find-close').addEventListener('click', () => findBar.classList.remove('show'));
+document.getElementById('replace-one').addEventListener('click', replaceCurrent);
+document.getElementById('replace-all').addEventListener('click', replaceAll);
+replaceInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); replaceCurrent(); }
+  else if (e.key === 'Escape') { findBar.classList.remove('show'); editor.focus(); }
+});
 
 // ── Toolbar buttons ────────────────────────────────────────
 document.getElementById('btn-new'   ).addEventListener('click', handleNew);
@@ -709,6 +772,19 @@ slider.addEventListener('input', () => {
   lineNums.style.fontSize = sz;
   fontLabel.textContent = sz;
   updateLineNumbers();
+});
+
+// ── Drag & drop to open files ──────────────────────────────
+document.addEventListener('dragover', e => { e.preventDefault(); });
+document.addEventListener('drop', async e => {
+  e.preventDefault();
+  const files = Array.from(e.dataTransfer.files);
+  for (const file of files) {
+    try {
+      const content = await file.text();
+      openContent(file.name, content, file.path || null);
+    } catch { /* ignore unreadable drops */ }
+  }
 });
 
 // ── Window close guard ─────────────────────────────────────
