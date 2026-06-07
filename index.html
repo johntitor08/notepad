@@ -514,6 +514,7 @@ function switchTab(id) {
   updateLineNumbers();
   updateStats();
   updateStatusBar();
+  persistSession();
 }
 
 function closeTab(id) {
@@ -530,6 +531,7 @@ function closeTab(id) {
   } else {
     renderTabs();
   }
+  persistSession();
 }
 
 // ── Editor helpers ─────────────────────────────────────────
@@ -568,6 +570,7 @@ function markModified() {
     activeTab.modified = true;
     modBadge.className = 'show';
     renderTabs();
+    schedulePersist();
   }
 }
 
@@ -591,11 +594,25 @@ editor.addEventListener('keydown', e => {
     editor.selectionStart = editor.selectionEnd = s + 2;
     markModified();
   }
+  // Enter → keep the current line's leading indentation
+  if (e.key === 'Enter' && !e.ctrlKey && !e.altKey) {
+    const s = editor.selectionStart;
+    const lineStart = editor.value.lastIndexOf('\n', s - 1) + 1;
+    const indent = (editor.value.slice(lineStart, s).match(/^[ \t]*/) || [''])[0];
+    if (indent) {
+      e.preventDefault();
+      editor.setRangeText('\n' + indent, s, editor.selectionEnd, 'end');
+      markModified();
+      updateLineNumbers();
+      updateStats();
+    }
+  }
   // Ctrl+S
   if (e.ctrlKey && e.key === 's' && !e.shiftKey) { e.preventDefault(); handleSave(); }
   if (e.ctrlKey && e.key === 'S') { e.preventDefault(); handleSaveAs(); }
   if (e.ctrlKey && e.key === 'f') { e.preventDefault(); toggleFind(); }
   if (e.ctrlKey && e.key === 'h') { e.preventDefault(); openReplace(); }
+  if (e.ctrlKey && e.key === 'g') { e.preventDefault(); gotoLine(); }
   if (e.ctrlKey && e.key === 'n') { e.preventDefault(); handleNew(); }
   if (e.ctrlKey && e.key === 'o') { e.preventDefault(); handleOpen(); }
   if (e.ctrlKey && e.key === 'w') { e.preventDefault(); if (activeTab) closeTab(activeTab.id); }
@@ -619,6 +636,7 @@ function openContent(name, content, path) {
   filePath.textContent = path || 'kayıt yok';
   updateLineNumbers();
   updateStats();
+  persistSession();
 }
 
 async function handleOpen() {
@@ -639,6 +657,7 @@ async function handleSave() {
     filePath.textContent = result.path;
     modBadge.className = '';
     renderTabs();
+    persistSession();
   }
 }
 
@@ -653,6 +672,7 @@ async function handleSaveAs() {
     filePath.textContent = result.path;
     modBadge.className = '';
     renderTabs();
+    persistSession();
   }
 }
 
@@ -787,16 +807,73 @@ document.addEventListener('drop', async e => {
   }
 });
 
+// ── Go to line ─────────────────────────────────────────────
+function gotoLine() {
+  const lines = editor.value.split('\n');
+  const input = prompt(`Satıra git (1–${lines.length}):`);
+  if (input === null) return;
+  const n = parseInt(input, 10);
+  if (!Number.isFinite(n) || n < 1) return;
+  const target = Math.min(n, lines.length);
+  let pos = 0;
+  for (let i = 0; i < target - 1; i++) pos += lines[i].length + 1;
+  editor.focus();
+  editor.setSelectionRange(pos, pos + lines[target - 1].length);
+  updateStatusBar();
+}
+
+// ── Session persistence ────────────────────────────────────
+// Open tabs (including unsaved buffers) survive a restart via localStorage.
+const SESSION_KEY = 'notepad-session';
+let persistTimer = null;
+
+function persistSession() {
+  if (activeTab) activeTab.content = editor.value;
+  try {
+    const data = {
+      tabs: tabs.map(t => ({ name: t.name, content: t.content, path: t.path, modified: t.modified })),
+      activeIndex: tabs.indexOf(activeTab)
+    };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(data));
+  } catch { /* storage unavailable or quota exceeded */ }
+}
+
+function schedulePersist() {
+  clearTimeout(persistTimer);
+  persistTimer = setTimeout(persistSession, 400);
+}
+
+function restoreSession() {
+  let data;
+  try { data = JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { data = null; }
+  if (!data || !Array.isArray(data.tabs) || data.tabs.length === 0) return false;
+  data.tabs.forEach(t => {
+    tabs.push({
+      id: Date.now() + Math.random(),
+      name: t.name || 'İsimsiz',
+      content: t.content || '',
+      path: t.path || null,
+      modified: !!t.modified,
+      cursor: 0
+    });
+  });
+  renderTabs();
+  const idx = (data.activeIndex >= 0 && data.activeIndex < tabs.length) ? data.activeIndex : 0;
+  switchTab(tabs[idx].id);
+  return true;
+}
+
 // ── Window close guard ─────────────────────────────────────
 // Main process asks before closing; reply with the unsaved-tab count.
 window.api.onCheckUnsaved(() => {
   if (activeTab) activeTab.content = editor.value;
+  persistSession();
   const unsaved = tabs.filter(t => t.modified).length;
   window.api.confirmClose(unsaved);
 });
 
 // ── Init ───────────────────────────────────────────────────
-createTab();
+if (!restoreSession()) createTab();
 editor.style.whiteSpace = 'pre';
 </script>
 </body>
