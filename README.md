@@ -22,7 +22,7 @@ The app detects its environment automatically and uses the right file APIs.
 
 ## Features
 
-- Multiple tabs with session restore (open tabs survive a restart)
+- Multiple tabs with session restore (open tabs survive a restart); double-click a tab to rename it
 - Open / Save / Save As, plus a recent-files menu
 - Find & replace with case-sensitive and whole-word toggles
 - Line operations: duplicate, delete, move up/down
