@@ -28,6 +28,7 @@ The app detects its environment automatically and uses the right file APIs.
 - Line operations: duplicate, delete, move up/down
 - Auto-indent, go-to-line, word wrap, adjustable font size
 - Light / dark theme, line-ending (LF/CRLF) indicator
+- Print the current note (Ctrl+P)
 - Drag and drop files onto the window to open them
 
 ## Keyboard shortcuts
@@ -37,6 +38,7 @@ The app detects its environment automatically and uses the right file APIs.
 | Ctrl+N | New tab |
 | Ctrl+O | Open file |
 | Ctrl+S / Ctrl+Shift+S | Save / Save As |
+| Ctrl+P | Print |
 | Ctrl+W | Close tab |
 | Ctrl+F / Ctrl+H | Find / Replace |
 | Ctrl+G | Go to line |

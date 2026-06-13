@@ -403,6 +403,26 @@
       to   { opacity: 1; transform: translateY(0); }
     }
     #editor-container { animation: fadeIn .25s ease; }
+
+    /* ── Print ── */
+    #print-area { display: none; }
+    @media print {
+      #titlebar, #app, #recent-menu { display: none !important; }
+      #print-area {
+        display: block !important;
+        position: absolute;
+        left: 0; top: 0;
+        width: 100%;
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: #000;
+        background: #fff;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        line-height: 1.6;
+      }
+    }
   </style>
 </head>
 <body>
@@ -420,6 +440,7 @@
     <button class="tool-btn" id="btn-recent"  >Son</button>
     <button class="tool-btn" id="btn-save"    >Kaydet</button>
     <button class="tool-btn" id="btn-saveas"  >Farklı Kaydet</button>
+    <button class="tool-btn" id="btn-print"   >Yazdır</button>
     <button class="tool-btn" id="btn-find"    >Bul</button>
     <button class="tool-btn" id="btn-wrap"    >Kaydır</button>
     <button class="tool-btn" id="btn-theme"   >Tema</button>
@@ -501,6 +522,9 @@
 
 <!-- Recent files dropdown -->
 <div id="recent-menu"></div>
+
+<!-- Print-only container (populated with the active note's text) -->
+<pre id="print-area"></pre>
 
 <script>
 // ── Electron bridge / browser fallback ─────────────────────
@@ -758,6 +782,7 @@ editor.addEventListener('keydown', e => {
   if (e.ctrlKey && k === 'g') { e.preventDefault(); gotoLine(); }
   if (e.ctrlKey && k === 'n') { e.preventDefault(); handleNew(); }
   if (e.ctrlKey && k === 'o') { e.preventDefault(); handleOpen(); }
+  if (e.ctrlKey && k === 'p') { e.preventDefault(); handlePrint(); }
   if (e.ctrlKey && k === 'w') { e.preventDefault(); if (activeTab) closeTab(activeTab.id); }
   // Line operations
   if (e.ctrlKey && !e.shiftKey && k === 'd') { e.preventDefault(); duplicateLine(); }
@@ -903,6 +928,12 @@ async function handleSaveAs() {
   } catch (err) {
     flashStatus('Kaydetme hatası', true);
   }
+}
+
+// Print the active note's text only (see the @media print stylesheet).
+function handlePrint() {
+  document.getElementById('print-area').textContent = editor.value;
+  window.print();
 }
 
 // ── Find / Replace ─────────────────────────────────────────
@@ -1067,6 +1098,7 @@ document.addEventListener('click', e => {
 
 document.getElementById('btn-save'  ).addEventListener('click', handleSave);
 document.getElementById('btn-saveas').addEventListener('click', handleSaveAs);
+document.getElementById('btn-print' ).addEventListener('click', handlePrint);
 document.getElementById('btn-find'  ).addEventListener('click', toggleFind);
 document.getElementById('btn-wrap'  ).addEventListener('click', () => {
   wrapEnabled = !wrapEnabled;
