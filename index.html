@@ -503,6 +503,30 @@
 <div id="recent-menu"></div>
 
 <script>
+// ── Electron bridge guard ──────────────────────────────────
+// The preload script exposes window.api. If it's missing, the page was
+// opened directly in a browser (file://) instead of run through Electron.
+// Provide safe stubs so the editor still loads and tell the user how to
+// launch the real app instead of crashing on the first window.api call.
+if (!window.api) {
+  let warned = false;
+  const warn = () => {
+    if (warned) return;
+    warned = true;
+    flashStatus('Electron gerekli — "npm start" ile açın', true);
+  };
+  window.api = {
+    openFile:       async () => { warn(); return null; },
+    readPath:       async () => { warn(); return null; },
+    saveFile:       async () => { warn(); return null; },
+    saveFileAs:     async () => { warn(); return null; },
+    getPathForFile: () => null,
+    minimize() {}, maximize() {}, close() {},
+    confirmClose() {},
+    onCheckUnsaved() {}
+  };
+}
+
 // ── State ──────────────────────────────────────────────────
 let tabs = [];
 let activeTab = null;
