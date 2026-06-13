@@ -503,28 +503,75 @@
 <div id="recent-menu"></div>
 
 <script>
-// ── Electron bridge guard ──────────────────────────────────
-// The preload script exposes window.api. If it's missing, the page was
-// opened directly in a browser (file://) instead of run through Electron.
-// Provide safe stubs so the editor still loads and tell the user how to
-// launch the real app instead of crashing on the first window.api call.
+// ── Electron bridge / browser fallback ─────────────────────
+// The preload script exposes window.api when running in Electron. When the
+// page is opened directly in a browser there is no preload, so fall back to
+// standard web APIs: a file picker for opening and the File System Access
+// API (or a download) for saving. This lets the app run as a plain .html
+// file with no Electron/npm required.
 if (!window.api) {
-  let warned = false;
-  const warn = () => {
-    if (warned) return;
-    warned = true;
-    flashStatus('Electron gerekli — "npm start" ile açın', true);
+  const browserOpen = () => new Promise(resolve => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.txt,.md,.js,.ts,.html,.css,.json,text/*';
+    input.onchange = () => {
+      const file = input.files && input.files[0];
+      if (!file) return resolve(null);
+      const reader = new FileReader();
+      reader.onload  = () => resolve({ path: file.name, content: String(reader.result) });
+      reader.onerror = () => resolve(null);
+      reader.readAsText(file);
+    };
+    input.click();
+  });
+
+  const downloadFile = (content, filename) => {
+    const blob = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = blob;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(blob), 1000);
   };
+
+  const browserSave = async (content, suggestedName) => {
+    const name = suggestedName || (activeTab && activeTab.name) || 'not.txt';
+    // Prefer a real save dialog where available (Chromium on http/https).
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({ suggestedName: name });
+        const writable = await handle.createWritable();
+        await writable.write(content);
+        await writable.close();
+        return { path: handle.name };
+      } catch (err) {
+        if (err && err.name === 'AbortError') return null; // user cancelled
+        // otherwise fall through to a download
+      }
+    }
+    downloadFile(content, name);
+    return { path: name };
+  };
+
   window.api = {
-    openFile:       async () => { warn(); return null; },
-    readPath:       async () => { warn(); return null; },
-    saveFile:       async () => { warn(); return null; },
-    saveFileAs:     async () => { warn(); return null; },
+    openFile:       () => browserOpen(),
+    readPath:       async () => null, // browsers can't reopen by arbitrary path
+    saveFile:       (content, path) => browserSave(content, path),
+    saveFileAs:     (content) => browserSave(content, null),
     getPathForFile: () => null,
     minimize() {}, maximize() {}, close() {},
     confirmClose() {},
-    onCheckUnsaved() {}
+    onCheckUnsaved() {} // Electron-only; browser uses beforeunload below
   };
+
+  // Warn before leaving with unsaved changes (browser equivalent of the
+  // Electron close guard).
+  window.addEventListener('beforeunload', e => {
+    if (activeTab) activeTab.content = editor.value;
+    if (tabs.some(t => t.modified)) { e.preventDefault(); e.returnValue = ''; }
+  });
 }
 
 // ── State ──────────────────────────────────────────────────

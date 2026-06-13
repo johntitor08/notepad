@@ -4,15 +4,21 @@ A minimal tabbed notepad built with Electron.
 
 ## Running
 
-This is an **Electron app** — it must be launched through Electron, not by
-opening `index.html` directly in a browser. Opening the file directly
-(`file://…/index.html`) means the preload bridge is unavailable, so opening
-and saving files won't work.
+You can run it two ways:
+
+**As a plain web page** — just open `index.html` in a browser (double-click
+it). Opening uses a file picker; saving uses the browser's save dialog where
+supported (Chrome/Edge) or falls back to a download. No install needed.
+
+**As a desktop app (Electron)** — gives native open/save dialogs that write
+files in place:
 
 ```bash
 npm install   # first time only
 npm start
 ```
+
+The app detects its environment automatically and uses the right file APIs.
 
 ## Features
 
