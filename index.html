@@ -182,6 +182,18 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .tab-rename {
+      flex: 1;
+      min-width: 0;
+      background: var(--bg);
+      border: 1px solid var(--accent);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 11px;
+      padding: 1px 4px;
+      border-radius: 2px;
+      outline: none;
+    }
     .tab-close {
       opacity: 0;
       font-size: 14px;
@@ -706,6 +718,7 @@ function renderTabs() {
     nameEl.className = 'tab-name';
     nameEl.title = t.name;
     nameEl.textContent = t.name;
+    nameEl.addEventListener('dblclick', e => { e.stopPropagation(); startRename(t, nameEl); });
     el.appendChild(nameEl);
 
     const closeEl = document.createElement('span');
@@ -720,6 +733,34 @@ function renderTabs() {
     });
     tabsEl.appendChild(el);
   });
+}
+
+// Inline-edit a tab's label (double-click). Updates the display name, which
+// is also used as the suggested filename when saving an unsaved note.
+function startRename(tab, nameEl) {
+  const input = document.createElement('input');
+  input.className = 'tab-rename';
+  input.value = tab.name;
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = (commit) => {
+    if (done) return;
+    done = true;
+    if (commit) {
+      const v = input.value.trim();
+      if (v) { tab.name = v; persistSession(); }
+    }
+    renderTabs();
+  };
+  input.addEventListener('click', e => e.stopPropagation());
+  input.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
 }
 
 function switchTab(id) {
