@@ -331,6 +331,9 @@
 
     #statusbar .accent { color: var(--accent); }
     #statusbar .clickable { cursor: pointer; }
+    #save-status { color: var(--accent); opacity: 0; transition: opacity .2s; }
+    #save-status.show { opacity: 1; }
+    #save-status.error { color: #ff5f57; }
     #statusbar .clickable:hover { filter: brightness(1.35); }
 
     /* ── Find bar ── */
@@ -484,6 +487,7 @@
       <span>Ln <span class="accent" id="sb-line">1</span></span>
       <span>Col <span class="accent" id="sb-col">1</span></span>
       <span>Seç <span class="accent" id="sb-sel">0</span></span>
+      <span id="save-status"></span>
       <div class="spacer"></div>
       <span>
         <input id="font-slider" type="range" min="10" max="24" value="13" title="Yazı boyutu" />
@@ -784,35 +788,49 @@ function contentForSave() {
     : activeTab.content;
 }
 
+// Brief status-bar confirmation so a successful save is visible.
+let saveStatusTimer = null;
+function flashStatus(msg, isError = false) {
+  const el = document.getElementById('save-status');
+  el.textContent = msg;
+  el.classList.toggle('error', isError);
+  el.classList.add('show');
+  clearTimeout(saveStatusTimer);
+  saveStatusTimer = setTimeout(() => el.classList.remove('show'), 1800);
+}
+
+// Apply a successful save result to the active tab.
+function applySaveResult(result) {
+  activeTab.path = result.path;
+  activeTab.name = result.path.split(/[\\/]/).pop();
+  activeTab.modified = false;
+  filePath.textContent = result.path;
+  modBadge.className = '';
+  renderTabs();
+  addRecent(result.path);
+  persistSession();
+  flashStatus('Kaydedildi ✓');
+}
+
 async function handleSave() {
   if (!activeTab) return;
   activeTab.content = editor.value;
-  const result = await window.api.saveFile(contentForSave(), activeTab.path);
-  if (result) {
-    activeTab.path = result.path;
-    activeTab.name = result.path.split(/[\\/]/).pop();
-    activeTab.modified = false;
-    filePath.textContent = result.path;
-    modBadge.className = '';
-    renderTabs();
-    addRecent(result.path);
-    persistSession();
+  try {
+    const result = await window.api.saveFile(contentForSave(), activeTab.path);
+    if (result) applySaveResult(result); // null = user cancelled the Save As dialog
+  } catch (err) {
+    flashStatus('Kaydetme hatası', true);
   }
 }
 
 async function handleSaveAs() {
   if (!activeTab) return;
   activeTab.content = editor.value;
-  const result = await window.api.saveFileAs(contentForSave());
-  if (result) {
-    activeTab.path = result.path;
-    activeTab.name = result.path.split(/[\\/]/).pop();
-    activeTab.modified = false;
-    filePath.textContent = result.path;
-    modBadge.className = '';
-    renderTabs();
-    addRecent(result.path);
-    persistSession();
+  try {
+    const result = await window.api.saveFileAs(contentForSave());
+    if (result) applySaveResult(result);
+  } catch (err) {
+    flashStatus('Kaydetme hatası', true);
   }
 }
 
