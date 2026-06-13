@@ -404,6 +404,44 @@
     }
     #editor-container { animation: fadeIn .25s ease; }
 
+    /* ── Help overlay ── */
+    #help-overlay {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,.55);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+    }
+    #help-overlay.show { display: flex; }
+    #help-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      width: 380px;
+      max-width: 90vw;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 12px 48px rgba(0,0,0,.6);
+      animation: fadeIn .15s ease;
+    }
+    #help-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 10px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    #help-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    #help-table td { padding: 7px 16px; color: var(--text); }
+    #help-table td:first-child { color: var(--accent); white-space: nowrap; width: 42%; }
+    #help-table tr + tr td { border-top: 1px solid var(--border); }
+
     /* ── Print ── */
     #print-area { display: none; }
     @media print {
@@ -444,6 +482,7 @@
     <button class="tool-btn" id="btn-find"    >Bul</button>
     <button class="tool-btn" id="btn-wrap"    >Kaydır</button>
     <button class="tool-btn" id="btn-theme"   >Tema</button>
+    <button class="tool-btn" id="btn-help"    title="Klavye kısayolları">?</button>
   </div>
 </div>
 
@@ -525,6 +564,31 @@
 
 <!-- Print-only container (populated with the active note's text) -->
 <pre id="print-area"></pre>
+
+<!-- Keyboard shortcuts help -->
+<div id="help-overlay">
+  <div id="help-panel">
+    <div id="help-header">
+      <span>Klavye Kısayolları</span>
+      <button id="help-close" class="find-btn" title="Kapat">✕</button>
+    </div>
+    <table id="help-table">
+      <tr><td>Ctrl+N</td><td>Yeni sekme</td></tr>
+      <tr><td>Ctrl+O</td><td>Aç</td></tr>
+      <tr><td>Ctrl+S</td><td>Kaydet</td></tr>
+      <tr><td>Ctrl+Shift+S</td><td>Farklı Kaydet</td></tr>
+      <tr><td>Ctrl+P</td><td>Yazdır</td></tr>
+      <tr><td>Ctrl+W</td><td>Sekmeyi kapat</td></tr>
+      <tr><td>Ctrl+F</td><td>Bul</td></tr>
+      <tr><td>Ctrl+H</td><td>Değiştir</td></tr>
+      <tr><td>Ctrl+G</td><td>Satıra git</td></tr>
+      <tr><td>Ctrl+D</td><td>Satırı çoğalt</td></tr>
+      <tr><td>Ctrl+Shift+K</td><td>Satırı sil</td></tr>
+      <tr><td>Alt+↑ / Alt+↓</td><td>Satırı yukarı / aşağı taşı</td></tr>
+      <tr><td>Ctrl+/</td><td>Bu yardım</td></tr>
+    </table>
+  </div>
+</div>
 
 <script>
 // ── Electron bridge / browser fallback ─────────────────────
@@ -783,13 +847,14 @@ editor.addEventListener('keydown', e => {
   if (e.ctrlKey && k === 'n') { e.preventDefault(); handleNew(); }
   if (e.ctrlKey && k === 'o') { e.preventDefault(); handleOpen(); }
   if (e.ctrlKey && k === 'p') { e.preventDefault(); handlePrint(); }
+  if (e.ctrlKey && k === '/') { e.preventDefault(); toggleHelp(); }
   if (e.ctrlKey && k === 'w') { e.preventDefault(); if (activeTab) closeTab(activeTab.id); }
   // Line operations
   if (e.ctrlKey && !e.shiftKey && k === 'd') { e.preventDefault(); duplicateLine(); }
   if (e.ctrlKey && e.shiftKey && k === 'k')  { e.preventDefault(); deleteLine(); }
   if (e.altKey && e.key === 'ArrowUp')   { e.preventDefault(); moveLines(-1); }
   if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); moveLines(1); }
-  if (e.key === 'Escape') { findBar.classList.remove('show'); }
+  if (e.key === 'Escape') { findBar.classList.remove('show'); toggleHelp(false); }
 });
 
 // ── Line editing ───────────────────────────────────────────
@@ -1110,6 +1175,18 @@ document.getElementById('btn-theme' ).addEventListener('click', () => {
   currentTheme = currentTheme === 'light' ? 'dark' : 'light';
   applyTheme(currentTheme);
   savePrefs();
+});
+
+// ── Shortcuts help overlay ─────────────────────────────────
+const helpOverlay = document.getElementById('help-overlay');
+function toggleHelp(force) {
+  const show = force !== undefined ? force : !helpOverlay.classList.contains('show');
+  helpOverlay.classList.toggle('show', show);
+}
+document.getElementById('btn-help').addEventListener('click', () => toggleHelp());
+document.getElementById('help-close').addEventListener('click', () => toggleHelp(false));
+helpOverlay.addEventListener('click', e => {
+  if (e.target === helpOverlay) toggleHelp(false); // click outside the panel
 });
 
 // ── Line-ending toggle ─────────────────────────────────────

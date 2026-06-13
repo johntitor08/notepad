@@ -45,3 +45,4 @@ The app detects its environment automatically and uses the right file APIs.
 | Ctrl+D | Duplicate line |
 | Ctrl+Shift+K | Delete line |
 | Alt+↑ / Alt+↓ | Move line up / down |
+| Ctrl+/ | Show keyboard shortcuts |
