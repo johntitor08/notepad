@@ -299,6 +299,36 @@
       letter-spacing: .05em;
     }
     #statusbar span { display: flex; align-items: center; gap: 5px; }
+    /* ── Recent files dropdown ── */
+    #recent-menu {
+      display: none;
+      position: absolute;
+      top: var(--bar-h);
+      right: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px;
+      z-index: 20;
+      min-width: 240px;
+      max-height: 320px;
+      overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    }
+    #recent-menu.show { display: block; }
+    .recent-item {
+      padding: 6px 10px;
+      font-size: 11px;
+      color: var(--muted);
+      cursor: pointer;
+      border-radius: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .recent-item:hover { color: var(--accent); background: rgba(255,255,255,.04); }
+    .recent-empty { padding: 8px 10px; font-size: 10px; color: var(--muted); }
+
     #statusbar .accent { color: var(--accent); }
     #statusbar .clickable { cursor: pointer; }
     #statusbar .clickable:hover { filter: brightness(1.35); }
@@ -383,6 +413,7 @@
   <div id="toolbar">
     <button class="tool-btn" id="btn-new"     >Yeni</button>
     <button class="tool-btn" id="btn-open"    >Aç</button>
+    <button class="tool-btn" id="btn-recent"  >Son</button>
     <button class="tool-btn" id="btn-save"    >Kaydet</button>
     <button class="tool-btn" id="btn-saveas"  >Farklı Kaydet</button>
     <button class="tool-btn" id="btn-find"    >Bul</button>
@@ -453,6 +484,9 @@
     </div>
   </div>
 </div>
+
+<!-- Recent files dropdown -->
+<div id="recent-menu"></div>
 
 <script>
 // ── State ──────────────────────────────────────────────────
@@ -722,6 +756,7 @@ function openContent(name, content, path) {
   updateLineNumbers();
   updateStats();
   updateEol();
+  addRecent(path);
   persistSession();
 }
 
@@ -750,6 +785,7 @@ async function handleSave() {
     filePath.textContent = result.path;
     modBadge.className = '';
     renderTabs();
+    addRecent(result.path);
     persistSession();
   }
 }
@@ -765,6 +801,7 @@ async function handleSaveAs() {
     filePath.textContent = result.path;
     modBadge.className = '';
     renderTabs();
+    addRecent(result.path);
     persistSession();
   }
 }
@@ -881,6 +918,54 @@ replaceInput.addEventListener('keydown', e => {
 // ── Toolbar buttons ────────────────────────────────────────
 document.getElementById('btn-new'   ).addEventListener('click', handleNew);
 document.getElementById('btn-open'  ).addEventListener('click', handleOpen);
+
+// ── Recent files ───────────────────────────────────────────
+const RECENT_KEY = 'notepad-recent';
+const recentMenu = document.getElementById('recent-menu');
+
+function getRecent() {
+  try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch { return []; }
+}
+function addRecent(path) {
+  if (!path) return;
+  const list = [path, ...getRecent().filter(p => p !== path)].slice(0, 10);
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)); } catch { /* storage unavailable */ }
+}
+function renderRecent() {
+  recentMenu.innerHTML = '';
+  const list = getRecent();
+  if (!list.length) {
+    const empty = document.createElement('div');
+    empty.className = 'recent-empty';
+    empty.textContent = 'Son dosya yok';
+    recentMenu.appendChild(empty);
+    return;
+  }
+  list.forEach(path => {
+    const item = document.createElement('div');
+    item.className = 'recent-item';
+    item.title = path;
+    item.textContent = path.split(/[\\/]/).pop(); // textContent avoids injection
+    item.addEventListener('click', async () => {
+      recentMenu.classList.remove('show');
+      const result = await window.api.readPath(path);
+      if (result) openContent(result.path.split(/[\\/]/).pop(), result.content, result.path);
+    });
+    recentMenu.appendChild(item);
+  });
+}
+document.getElementById('btn-recent').addEventListener('click', e => {
+  e.stopPropagation();
+  if (recentMenu.classList.contains('show')) { recentMenu.classList.remove('show'); return; }
+  renderRecent();
+  recentMenu.classList.add('show');
+});
+document.addEventListener('click', e => {
+  if (!recentMenu.contains(e.target) && e.target.id !== 'btn-recent') {
+    recentMenu.classList.remove('show');
+  }
+});
+
 document.getElementById('btn-save'  ).addEventListener('click', handleSave);
 document.getElementById('btn-saveas').addEventListener('click', handleSaveAs);
 document.getElementById('btn-find'  ).addEventListener('click', toggleFind);

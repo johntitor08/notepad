@@ -77,6 +77,17 @@ ipcMain.handle('open-file', async () => {
   }
 });
 
+// Open a file by a known path (used by the recent-files menu).
+ipcMain.handle('read-path', async (event, filePath) => {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return { path: filePath, content };
+  } catch (err) {
+    dialog.showErrorBox('Dosya açılamadı', err.message);
+    return null;
+  }
+});
+
 // Save to the tab's own path when known, otherwise fall back to Save As.
 ipcMain.handle('save-file', async (event, { content, path: filePath }) => {
   if (filePath) {
