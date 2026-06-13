@@ -49,8 +49,13 @@ async function saveAs(content) {
     ]
   });
   if (result.canceled) return null;
-  fs.writeFileSync(result.filePath, content, 'utf-8');
-  return { path: result.filePath };
+  try {
+    fs.writeFileSync(result.filePath, content, 'utf-8');
+    return { path: result.filePath };
+  } catch (err) {
+    dialog.showErrorBox('Dosya kaydedilemedi', err.message);
+    return null;
+  }
 }
 
 // IPC Handlers

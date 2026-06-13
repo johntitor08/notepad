@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   newFile: () => ipcRenderer.invoke('new-file'),
@@ -11,4 +11,5 @@ contextBridge.exposeInMainWorld('api', {
   close: () => ipcRenderer.invoke('close-window'),
   confirmClose: (count) => ipcRenderer.invoke('confirm-close', count),
   onCheckUnsaved: (cb) => ipcRenderer.on('check-unsaved', cb),
+  getPathForFile: (file) => webUtils.getPathForFile(file),
 });

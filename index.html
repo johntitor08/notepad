@@ -334,7 +334,7 @@
     #statusbar .clickable:hover { filter: brightness(1.35); }
 
     /* ── Find bar ── */
-    #find-bar {
+    #find-bar, #goto-bar {
       display: none;
       position: absolute;
       top: 36px;
@@ -349,8 +349,9 @@
       box-shadow: 0 8px 32px rgba(0,0,0,.5);
     }
     #find-bar.show { display: flex; flex-direction: column; }
+    #goto-bar.show { display: flex; }
     .find-row { display: flex; gap: 8px; align-items: center; }
-    #find-input, #replace-input {
+    #find-input, #replace-input, #goto-input {
       background: var(--bg);
       border: 1px solid var(--border);
       color: var(--text);
@@ -462,6 +463,15 @@
         <input id="replace-input" type="text" placeholder="Değiştir…" spellcheck="false" />
         <button class="find-btn" id="replace-one" title="Değiştir">Değiştir</button>
         <button class="find-btn" id="replace-all" title="Tümünü değiştir">Tümü</button>
+      </div>
+    </div>
+
+    <!-- Go to line bar -->
+    <div id="goto-bar">
+      <div class="find-row">
+        <input id="goto-input" type="text" placeholder="Satıra git…" spellcheck="false" />
+        <button class="find-btn" id="goto-go">Git</button>
+        <button class="find-btn" id="goto-close" title="Kapat">✕</button>
       </div>
     </div>
 
@@ -644,13 +654,13 @@ editor.addEventListener('scroll', () => {
 });
 
 editor.addEventListener('keydown', e => {
-  // Tab key → insert spaces
+  // Tab key → insert spaces (setRangeText keeps native undo)
   if (e.key === 'Tab') {
     e.preventDefault();
-    const s = editor.selectionStart, end = editor.selectionEnd;
-    editor.value = editor.value.substring(0, s) + '  ' + editor.value.substring(end);
-    editor.selectionStart = editor.selectionEnd = s + 2;
+    editor.setRangeText('  ', editor.selectionStart, editor.selectionEnd, 'end');
     markModified();
+    updateLineNumbers();
+    updateStats();
   }
   // Enter → keep the current line's leading indentation
   if (e.key === 'Enter' && !e.ctrlKey && !e.altKey) {
@@ -665,18 +675,18 @@ editor.addEventListener('keydown', e => {
       updateStats();
     }
   }
-  // Ctrl+S
-  if (e.ctrlKey && e.key === 's' && !e.shiftKey) { e.preventDefault(); handleSave(); }
-  if (e.ctrlKey && e.key === 'S') { e.preventDefault(); handleSaveAs(); }
-  if (e.ctrlKey && e.key === 'f') { e.preventDefault(); toggleFind(); }
-  if (e.ctrlKey && e.key === 'h') { e.preventDefault(); openReplace(); }
-  if (e.ctrlKey && e.key === 'g') { e.preventDefault(); gotoLine(); }
-  if (e.ctrlKey && e.key === 'n') { e.preventDefault(); handleNew(); }
-  if (e.ctrlKey && e.key === 'o') { e.preventDefault(); handleOpen(); }
-  if (e.ctrlKey && e.key === 'w') { e.preventDefault(); if (activeTab) closeTab(activeTab.id); }
+  // Shortcuts — key.toLowerCase() + shiftKey so CapsLock doesn't break them.
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (e.ctrlKey && k === 's') { e.preventDefault(); e.shiftKey ? handleSaveAs() : handleSave(); }
+  if (e.ctrlKey && k === 'f') { e.preventDefault(); toggleFind(); }
+  if (e.ctrlKey && k === 'h') { e.preventDefault(); openReplace(); }
+  if (e.ctrlKey && k === 'g') { e.preventDefault(); gotoLine(); }
+  if (e.ctrlKey && k === 'n') { e.preventDefault(); handleNew(); }
+  if (e.ctrlKey && k === 'o') { e.preventDefault(); handleOpen(); }
+  if (e.ctrlKey && k === 'w') { e.preventDefault(); if (activeTab) closeTab(activeTab.id); }
   // Line operations
-  if (e.ctrlKey && !e.shiftKey && e.key === 'd') { e.preventDefault(); duplicateLine(); }
-  if (e.ctrlKey && e.shiftKey && e.key === 'K')  { e.preventDefault(); deleteLine(); }
+  if (e.ctrlKey && !e.shiftKey && k === 'd') { e.preventDefault(); duplicateLine(); }
+  if (e.ctrlKey && e.shiftKey && k === 'k')  { e.preventDefault(); deleteLine(); }
   if (e.altKey && e.key === 'ArrowUp')   { e.preventDefault(); moveLines(-1); }
   if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); moveLines(1); }
   if (e.key === 'Escape') { findBar.classList.remove('show'); }
@@ -870,7 +880,7 @@ function replaceAll() {
   const re = buildFindRegex(term);
   const replaced = editor.value.replace(re, () => replaceInput.value); // literal replacement
   if (replaced === editor.value) return;
-  editor.value = replaced;
+  editor.setRangeText(replaced, 0, editor.value.length, 'start'); // keeps native undo
   markModified();
   updateLineNumbers();
   updateStats();
@@ -1057,25 +1067,49 @@ document.addEventListener('drop', async e => {
   for (const file of files) {
     try {
       const content = await file.text();
-      openContent(file.name, content, file.path || null);
+      // file.path was removed in Electron 32+; resolve it via preload.
+      let realPath = null;
+      try { realPath = window.api.getPathForFile(file) || null; } catch { /* no path available */ }
+      openContent(file.name, content, realPath);
     } catch { /* ignore unreadable drops */ }
   }
 });
 
 // ── Go to line ─────────────────────────────────────────────
+// window.prompt() is not supported in Electron, so we use an inline bar.
+const gotoBar   = document.getElementById('goto-bar');
+const gotoInput = document.getElementById('goto-input');
+
 function gotoLine() {
-  const lines = editor.value.split('\n');
-  const input = prompt(`Satıra git (1–${lines.length}):`);
-  if (input === null) return;
-  const n = parseInt(input, 10);
+  const lineCount = editor.value.split('\n').length;
+  gotoInput.placeholder = `Satıra git (1–${lineCount})`;
+  gotoInput.value = '';
+  gotoBar.classList.add('show');
+  gotoInput.focus();
+}
+
+function doGoto() {
+  gotoBar.classList.remove('show');
+  const n = parseInt(gotoInput.value, 10);
+  editor.focus();
   if (!Number.isFinite(n) || n < 1) return;
+  const lines = editor.value.split('\n');
   const target = Math.min(n, lines.length);
   let pos = 0;
   for (let i = 0; i < target - 1; i++) pos += lines[i].length + 1;
-  editor.focus();
   editor.setSelectionRange(pos, pos + lines[target - 1].length);
   updateStatusBar();
 }
+
+gotoInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); doGoto(); }
+  else if (e.key === 'Escape') { gotoBar.classList.remove('show'); editor.focus(); }
+});
+document.getElementById('goto-go').addEventListener('click', doGoto);
+document.getElementById('goto-close').addEventListener('click', () => {
+  gotoBar.classList.remove('show');
+  editor.focus();
+});
 
 // ── Session persistence ────────────────────────────────────
 // Open tabs (including unsaved buffers) survive a restart via localStorage.
